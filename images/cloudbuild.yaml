@@ -1,0 +1,32 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    entrypoint: "bash"
+    args: ["-c", "docker pull $_IMAGE || exit 0"]
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "build",
+        "--network",
+        "host",
+        "-f",
+        "$_DOCKERFILE",
+        "-t",
+        "$_IMAGE:$SHORT_SHA",
+        "-t",
+        "$_IMAGE:latest",
+        "--build-arg",
+        "PYTHON_VERSION=$_PYTHON_VERSION",
+        "--build-arg",
+        "CUDA_VERSION=$_CUDA_VERSION",
+        "--build-arg",
+        "PROJECT_ID=$PROJECT_ID",
+        "--cache-from",
+        "$_IMAGE",
+        ".",
+      ]
+images: ["$_IMAGE"]
+substitutions:
+  _IMAGE: ""
+  _DOCKERFILE: ""
+  _PYTHON_VERSION: ""
+  _CUDA_VERSION: ""

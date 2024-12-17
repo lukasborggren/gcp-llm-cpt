@@ -1,0 +1,53 @@
+# Adapted from: https://cloud.google.com/dataproc-serverless/docs/guides/custom-containers#extra-configuration
+
+# Recommendation: Use Debian 12.
+FROM debian:12-slim
+
+ARG PYTHON_VERSION
+ARG PROJECT_ID
+ENV GOOGLE_CLOUD_PROJECT=${PROJECT_ID}
+
+# Suppress interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install utilities required by Spark scripts.
+RUN apt update && apt install -y procps tini libjemalloc2 wget
+
+# Enable jemalloc2 as default memory allocator
+ENV LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
+
+# Install and configure Miniconda3.
+ENV CONDA_HOME=/opt/miniforge3
+ENV PYSPARK_PYTHON=${CONDA_HOME}/bin/python
+ENV PATH=${CONDA_HOME}/bin:${PATH}
+ADD https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh .
+RUN bash Miniforge3-Linux-x86_64.sh -b -p /opt/miniforge3 \
+    && ${CONDA_HOME}/bin/conda config --system --set always_yes True \
+    && ${CONDA_HOME}/bin/conda config --system --set auto_update_conda False \
+    && ${CONDA_HOME}/bin/conda config --system --set channel_priority strict
+
+# Use mamba to quickly install Python.
+RUN ${CONDA_HOME}/bin/mamba install -n base python==${PYTHON_VERSION}
+
+# Install pip packages exported from poetry.lock file
+COPY images/requirements.txt .
+RUN ${PYSPARK_PYTHON} -m pip install -r requirements.txt
+RUN ${PYSPARK_PYTHON} -c "import nltk;nltk.download('punkt_tab', download_dir='${CONDA_HOME}/nltk_data')"
+
+# Add extra Python modules.
+ENV PYTHONPATH=/opt/python/packages
+RUN mkdir -p "${PYTHONPATH}"
+
+# Add extra jars.
+ENV SPARK_EXTRA_JARS_DIR=/opt/spark/jars/
+ENV SPARK_EXTRA_CLASSPATH='/opt/spark/jars/*'
+RUN mkdir -p "${SPARK_EXTRA_JARS_DIR}"
+
+RUN wget https://repos.spark-packages.org/graphframes/graphframes/0.8.4-spark3.5-s_2.13/graphframes-0.8.4-spark3.5-s_2.13.jar \
+    -P "${SPARK_EXTRA_JARS_DIR}"
+
+# Create the 'spark' group/user.
+# The GID and UID must be 1099. Home directory is required.
+RUN groupadd -g 1099 spark
+RUN useradd -u 1099 -g 1099 -d /home/spark -m spark
+USER spark

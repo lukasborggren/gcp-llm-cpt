@@ -1,0 +1,41 @@
+[tool.poetry]
+name = "gcp-llm-cpt"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "~3.11"
+datasets = "^3.1.0"
+fsspec = "^2024.9.0"
+gcs-torch-dataflux = "^1.4.0"
+gcsfs = "^2024.9.0"
+google-cloud-aiplatform = { extras = ["tensorboard"], version = "^1.74.0" }
+google-cloud-bigquery = { extras = ["pandas"], version = "^3.27.0" }
+google-cloud-pipeline-components = "^2.18.0"
+google-cloud-secret-manager = "^2.21.1"
+google-cloud-storage = "^2.19.0"
+graphframes-latest = "^0.8.3"
+huggingface-hub = { extras = ["hf-transfer"], version = "^0.26.5" }
+kfp = "^2.10.1"
+nltk = "^3.9.1"
+omegaconf = "^2.3.0"
+pyarrow = "^18.1.0"
+pyspark = "^3.5.3"
+torch = "^2.5.1"
+torchao = "^0.6.1"
+torchtune = "^0.4.0"
+
+[tool.poetry.group.dev.dependencies]
+black = "^24.10.0"
+isort = "^5.13.2"
+jupyter = "^1.1.1"
+matplotlib = "^3.9.3"
+mypy = "^1.13.0"
+pylint = "^3.3.2"
+torch-tb-profiler = "^0.4.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
