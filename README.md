@@ -51,3 +51,6 @@ bash images/build.sh spark
 ```
 
 Then, to execute a pipeline, simply run `poetry run python src/main.py`. This will compile and upload the Kubeflow pipeline to GCS, along with scripts for preprocessing and training. Thereafter, a pipeline job will be submitted to Vertex AI and the progress can be tracked in the [GCP console](https://console.cloud.google.com/vertex-ai/pipelines/runs).
+
+## Acknowledgements
+This project was partially supported by the Wallenberg AI, Autonomous Systems and Software Program funded by Knut and Alice Wallenberg Foundation to fufill the requirements to pass the WASP Graduate School Course Scalable Data Science and Distributed Machine Learning - ScaDaMaLe-WASP-UU-2024 at https://lamastex.github.io/ScaDaMaLe. Computing infrastructure for learning was supported by Databricks Inc.'s Community Edition. The course was Industrially sponsored by Jim Dowling of Logical Clocks AB, Stockholm, Sweden, Reza Zadeh of Matroid Inc., Palo Alto, California, USA, and Andreas Hellander & Salman Toor of Scaleout Systems AB, Uppsala, Sweden.
