@@ -11,6 +11,7 @@ from src.config import gcp, job
 gcs = storage.Client(project=gcp.PROJECT_ID)
 blob = gcs.bucket(gcp.BUCKET_NAME).blob(f"{gcp.TEMPLATE_DIR}/{job.PIPELINE_FILE}")
 
+# Compile pipeline and upload it to GCS
 with tempfile.TemporaryDirectory() as tmpdirname:
     local_path = f"{tmpdirname}/{job.PIPELINE_FILE}"
     compiler.Compiler().compile(
@@ -29,6 +30,7 @@ gcs.bucket(gcp.BUCKET_NAME).blob(
     f"{gcp.RECIPE_DIR}/{job.TRAIN_RECIPE_FILE}"
 ).upload_from_filename(job.TRAIN_RECIPE_FILE)
 
+# Instantiate pipeline job
 aiplatform.init(
     project=gcp.PROJECT_ID, location=gcp.REGION, staging_bucket=gcp.STAGING_PATH
 )
@@ -39,4 +41,5 @@ pipeline_job = aiplatform.PipelineJob(
     enable_caching=True,
 )
 
+# Submit pipeline job to Vertex AI
 pipeline_job.submit(service_account=gcp.SERVICE_ACCOUNT)

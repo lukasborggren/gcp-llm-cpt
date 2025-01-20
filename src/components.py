@@ -1,5 +1,9 @@
 # pylint: disable=import-outside-toplevel, redefined-outer-name, reimported, too-many-locals
-"""Kubeflow pipeline components."""
+"""Kubeflow pipeline components.
+
+These are the building blocks that are combined to create a pipeline.
+https://www.kubeflow.org/docs/components/pipelines/concepts/component/
+"""
 
 from typing import NamedTuple, Optional
 
@@ -9,8 +13,11 @@ from google_cloud_pipeline_components.v1.custom_job import (
 )
 from kfp import dsl
 
-from src.config import gcp
+from src.config import gcp, job
 
+# Load package versions to match the environment.
+# These are used when components use a standard Python image,
+# with only a few packages installed on top.
 with open("poetry.lock", "r", encoding="utf-8") as f:
     packages = tomlkit.parse(f.read()).get("package", [])
 VERSIONED: dict[str, str] = {
@@ -329,8 +336,7 @@ def train(
     args.standalone = True
     args.nproc_per_node = "auto"
 
-    log.info("Launching torchrun")
-
+    # Initialize TensorBoard logging
     aiplatform.start_upload_tb_log(
         tensorboard_experiment_name=os.environ["CLOUD_ML_JOB_ID"],
         logdir=config["metric_logger"]["log_dir"],
@@ -339,6 +345,7 @@ def train(
         location=os.environ["CLOUD_ML_REGION"],
     )
     try:
+        log.info("Launching torchrun")
         run(args)
     finally:
         aiplatform.end_upload_tb_log()
@@ -346,13 +353,12 @@ def train(
     return model
 
 
-# TODO: the worker pool spec should be set dynamically
 custom_training_job = create_custom_training_job_from_component(
     train,
-    replica_count=1,
-    machine_type="g2-standard-48",
-    accelerator_type="NVIDIA_L4",
-    accelerator_count=4,
+    replica_count=job.WORKER_POOL_SPEC["replica_count"],
+    machine_type=job.WORKER_POOL_SPEC["machine_type"],
+    accelerator_type=job.WORKER_POOL_SPEC["accelerator_type"],
+    accelerator_count=job.WORKER_POOL_SPEC["accelerator_count"],
     service_account=gcp.SERVICE_ACCOUNT,
     tensorboard=gcp.TENSORBOARD,
     base_output_directory=f"{gcp.BUCKET}/custom-job-outputs",

@@ -1,6 +1,8 @@
 """Custom torchtune training recipe.
 
 Built on: https://github.com/pytorch/torchtune/blob/main/recipes/full_finetune_distributed.py
+The somewhat ugly approach with monkey patching is used to avoid including a full ~900-line copy
+of the original recipe in the project.
 """
 
 import argparse

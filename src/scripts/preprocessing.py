@@ -1,4 +1,8 @@
-"""Spark application for text preprocessing."""
+"""Spark application for text preprocessing.
+
+This script is triggered as a CLI on Dataproc, with commands
+corresponding to the different preprocessing steps in the KFP pipeline.
+"""
 
 import argparse
 import os
@@ -153,8 +157,10 @@ def exact_deduplication(args: argparse.Namespace) -> int:
             The count of deduplicated records.
     """
 
+    # Read data directly from BigQuery to a PySpark DataFrame
     df = spark.read.format("bigquery").load(args.source).cache()
 
+    # Deduplicate rows
     df_dedup = (
         df.withColumn(
             "text_simple", simplify(F.col("text"), F.lit(args.normal_form))
@@ -191,7 +197,10 @@ def fuzzy_deduplication(args: argparse.Namespace) -> int:
             The count of deduplicated records.
     """
 
+    # Read data from partioned Parquet file
     df = spark.read.parquet(args.source).cache()
+
+    # Create a simple vectorization of text shingles
     cv = CountVectorizer(inputCol="shingles", outputCol="features")
     df = df.withColumn(
         "shingles", shingle(F.col("text_simple"), F.lit(args.ngram_length))
@@ -202,11 +211,14 @@ def fuzzy_deduplication(args: argparse.Namespace) -> int:
         .filter(non_zero(F.col("features")))["id", "features"]
         .cache()
     )
+
+    # Fit MinHash LSH model
     mh = MinHashLSH(
         inputCol="features", outputCol="hashes", numHashTables=args.minhash_permutations
     )
     model = mh.fit(features)
 
+    # Find pairs of similar texts
     pairs = (
         model.approxSimilarityJoin(
             features, features, threshold=args.similarity_threshold, distCol="dist"
@@ -218,6 +230,7 @@ def fuzzy_deduplication(args: argparse.Namespace) -> int:
         .cache()
     )
 
+    # Create "clusters" of similar texts by computing connected components
     clusters = (
         GraphFrame(
             pairs[["id_a"]].distinct().withColumnRenamed("id_a", "id"),
@@ -226,9 +239,12 @@ def fuzzy_deduplication(args: argparse.Namespace) -> int:
         .connectedComponents(algorithm="graphx")
         .cache()
     )
+
+    # Remove all but one text from each cluster
     keep = clusters.groupby("component").agg(F.any_value("id").alias("id"))
     remove = clusters.join(keep, on="id", how="left_anti")
     df_dedup = df.join(remove, on="id", how="left_anti").cache()
+
     df_dedup.write.parquet(args.destination)
 
     return df_dedup.count()
@@ -253,6 +269,7 @@ def tokenization(args: argparse.Namespace) -> int:
     uri = urlparse(cfg.tokenizer.path)
     bucket_name, filepath = uri.netloc, uri.path.lstrip("/")
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    # Download tokenizer file from GCS
     Client().bucket(bucket_name).blob(filepath).download_to_filename(filepath)
 
     global tokenizer  # pylint: disable=global-statement

@@ -1,5 +1,9 @@
 # pylint: disable=no-member,not-callable,no-value-for-parameter,too-many-arguments,too-many-positional-arguments
-"""Kubeflow pipelines for dataset creation and (continued) LLM pre-training."""
+"""Kubeflow pipelines for dataset creation and (continued) LLM pre-training.
+
+Each step, corresponding to a component, is executed as a standalone Kubernetes job on Vertex AI.
+Dependencies between steps are resolved by the KFP compiler to form a computational DAG.
+"""
 
 from google_cloud_pipeline_components.v1.bigquery import BigqueryQueryJobOp
 from google_cloud_pipeline_components.v1.dataproc import DataprocPySparkBatchOp
