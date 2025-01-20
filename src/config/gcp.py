@@ -7,6 +7,7 @@ kfp_param = bool | int | float | str | list | dict
 PYTHON_VERSION: str = subprocess.check_output(["pyenv", "local"]).decode().strip()
 CUDA_VERSION: str = "12.4.1"
 SPARK_RUNTIME_VERSION: str = "2.2"
+ETCD_VERSION: str = "v2.3.0"
 
 PROJECT_ID: str = "<REPLACE>"
 PROJECT_NUMBER: str = "<REPLACE>"

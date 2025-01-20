@@ -51,6 +51,6 @@ ARGS: dict[str, gcp.kfp_param] = {
 WORKER_POOL_SPEC: dict[str, str | int] = {
     "machine_type": "g2-standard-48",
     "accelerator_type": "NVIDIA_L4",
-    "accelerator_count": 4,
-    "replica_count": 1,
+    "accelerator_count": 2,
+    "replica_count": 2,
 }

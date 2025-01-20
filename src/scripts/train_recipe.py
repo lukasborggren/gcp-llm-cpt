@@ -179,6 +179,11 @@ class CustomRecipe(FullFinetuneRecipeDistributed):
 
 def recipe_main(cfg: DictConfig) -> None:
     """Entry point for the recipe."""
+    if os.environ["GROUP_WORLD_SIZE"] != "1":
+        # Because of badly configured DNS, host name resolution fails for
+        # multi-node communication. Instead, manually specify the IPv4 master address.
+        os.environ["MASTER_ADDR"] = os.environ["HOST_IP"]
+
     init_process_group(backend="gloo" if cfg.device == "cpu" else "nccl")
 
     if cfg.get("fsdp_cpu_offload", False):

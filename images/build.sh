@@ -10,8 +10,8 @@ fi
 BUILD_DIR=$(dirname "$0")
 DOCKERFILE=$BUILD_DIR/Dockerfile.$IMAGE_TYPE
 
-CONFIG=$(poetry run python -c "import src.config.gcp as c; print(c.PROJECT_ID, c.REGION, c.IMAGES['$IMAGE_TYPE'], c.PYTHON_VERSION, c.CUDA_VERSION)")
-IFS=" " read -r PROJECT REGION IMAGE PYTHON_VERSION CUDA_VERSION <<< $CONFIG
+CONFIG=$(poetry run python -c "import src.config.gcp as c; print(c.PROJECT_ID, c.REGION, c.IMAGES['$IMAGE_TYPE'], c.PYTHON_VERSION, c.ETCD_VERSION)")
+IFS=" " read -r PROJECT REGION IMAGE PYTHON_VERSION CUDA_VERSION ETCD_VERSION <<< $CONFIG
 SHORT_SHA=$(git rev-parse --short HEAD)
 
 poetry export -o $BUILD_DIR/requirements.txt
@@ -22,5 +22,5 @@ gcloud builds submit \
     --region $REGION \
     --config $BUILD_DIR/cloudbuild.yaml \
     --ignore-file $BUILD_DIR/.gcloudignore \
-    --substitutions SHORT_SHA=$SHORT_SHA,_IMAGE=$IMAGE,_DOCKERFILE=$DOCKERFILE,_PYTHON_VERSION=$PYTHON_VERSION,_CUDA_VERSION=$CUDA_VERSION \
+    --substitutions SHORT_SHA=$SHORT_SHA,_IMAGE=$IMAGE,_DOCKERFILE=$DOCKERFILE,_PYTHON_VERSION=$PYTHON_VERSION,_CUDA_VERSION=$CUDA_VERSION,_ETCD_VERSION=$ETCD_VERSION \
     .

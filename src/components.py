@@ -289,6 +289,10 @@ def train(
 
     import json
     import os
+    import socket
+    import subprocess
+    import time
+    from unittest.mock import patch
     from urllib.parse import urlparse
 
     import torch
@@ -297,6 +301,8 @@ def train(
     from kfp import dsl
     from torch.distributed.run import get_args_parser, run
     from torchtune import utils
+
+    from src.utils import CustomEtcdStore
 
     log = utils.get_logger("DEBUG")
     model = dsl.Model(uri=dsl.get_uri())
@@ -320,21 +326,76 @@ def train(
         bucket, [blob.name for blob in bucket.list_blobs(prefix=f"{model_dir}/")]
     )
 
-    # Overriding arguments from the YAML config.
+    # Overriding arguments from the YAML config
     config["bucket_name"] = bucket_name
     config["output_dir"] = urlparse(model.uri).path.lstrip("/")
     config["tokenizer"]["path"] = os.path.join(model_dir, config["tokenizer"]["path"])
     config["checkpointer"]["checkpoint_dir"] = model_dir
     config["device"] = "cuda" if torch.cuda.is_available() else "cpu"
     config["dataset"]["uri"] = train_data.uri
-    os.makedirs(config["output_dir"], exist_ok=True)
 
-    # HACK: This is inspired by the entrypoint of the torchtune CLI.
-    # The argparser from the torchrun CLI is used to get defaults for optional arguments.
+    os.makedirs(config["output_dir"], exist_ok=True)
+    os.makedirs(config["metric_logger"]["log_dir"], exist_ok=True)
+
+    # If multi-node training, use etcd backend for rendezvous
+    if (num_nodes := int(os.environ.get("WORLD_SIZE", "1"))) > 1:
+        ip_filename = f"{dsl.get_uri()}/host_ip"
+
+        if os.environ["RANK"] == "0":
+            os.environ["HOST_IP"] = socket.gethostbyname(socket.gethostname())
+            # Write host IP to GCS for other nodes to read
+            bucket = bucket.blob(ip_filename).upload_from_string(os.environ["HOST_IP"])
+
+            cmd = f"/tmp/etcd-download/etcd --name s1 --data-dir /tmp/etcd-download/s1  \
+                --listen-client-urls http://0.0.0.0:2379 --advertise-client-urls http://{os.environ['HOST_IP']}:2379 \
+                --listen-peer-urls http://0.0.0.0:2380 --initial-advertise-peer-urls http://{os.environ['HOST_IP']}:2380 \
+                --initial-cluster s1=http://{os.environ['HOST_IP']}:2380 --initial-cluster-token tkn"
+
+            log.info("Starting etcd server on host node")
+            # pylint: disable=consider-using-with
+            subprocess.Popen(cmd.split(), env=dict(os.environ, ETCDCTL_API="2"))
+            time.sleep(10)  # Wait for ETCD server to start in background
+        else:
+            log.info("Waiting for host IP to be uploaded to GCS")
+            for _ in range(60):
+                blob = bucket.blob(ip_filename)
+                if blob.exists():
+                    break
+                time.sleep(1)
+
+            # Read host IP from GCS
+            os.environ["HOST_IP"] = blob.download_as_string().decode()
+
+        rdzv_args = [
+            "--rdzv-backend",
+            "etcd-v2",
+            "--rdzv-endpoint",
+            f"{os.environ['HOST_IP']}:2379",
+            "--rdzv-id",
+            os.environ["CLOUD_ML_JOB_ID"],
+        ]
+    else:
+        # Start a local standalone rendezvous backend that is represented by a C10d TCP store
+        # on a free port. Useful when launching single-node, multi-worker job.
+        rdzv_args = ["--standalone"]
+
+    # HACK: This is inspired by the entrypoint of the torchtune CLI. The argparser from
+    # the torchrun CLI is used for validation and to get defaults for optional arguments.
     parser = get_args_parser()
-    args = parser.parse_args([filename, "--config", json.dumps(config)])
-    args.standalone = True
-    args.nproc_per_node = "auto"
+    args = parser.parse_args(
+        rdzv_args
+        + [
+            "--nnodes",
+            str(num_nodes),
+            "--nproc-per-node",
+            str(torch.cuda.device_count()),
+            "--node-rank",
+            os.environ.get("RANK", "0"),
+            filename,
+            "--config",
+            json.dumps(config),
+        ]
+    )
 
     # Initialize TensorBoard logging
     aiplatform.start_upload_tb_log(
@@ -345,14 +406,19 @@ def train(
         location=os.environ["CLOUD_ML_REGION"],
     )
     try:
-        log.info("Launching torchrun")
-        run(args)
+        # Monkey patching the rendezvous backend to fix known bug
+        with patch(
+            "torch.distributed.elastic.rendezvous.etcd_store.EtcdStore", CustomEtcdStore
+        ):
+            log.info("Launching torchrun")
+            run(args)
     finally:
         aiplatform.end_upload_tb_log()
 
     return model
 
 
+# Convert a KFP component into Vertex AI custom training job using the CustomJob API
 custom_training_job = create_custom_training_job_from_component(
     train,
     replica_count=job.WORKER_POOL_SPEC["replica_count"],
@@ -362,5 +428,4 @@ custom_training_job = create_custom_training_job_from_component(
     service_account=gcp.SERVICE_ACCOUNT,
     tensorboard=gcp.TENSORBOARD,
     base_output_directory=f"{gcp.BUCKET}/custom-job-outputs",
-    enable_web_access=True,
 )

@@ -30,3 +30,4 @@ substitutions:
   _DOCKERFILE: ""
   _PYTHON_VERSION: ""
   _CUDA_VERSION: ""
+  _ETCD_VERSION: ""
