@@ -83,10 +83,32 @@ class CheckpointHelper:
         self._executor = ThreadPoolExecutor(max_workers=1)
 
     def load(self, path: str, **kwargs: Any) -> dict[str, torch.Tensor]:
+        """Load an object directly from GCS with `torch.load`.
+
+        Args:
+            path (str):
+                The path to the file.
+            **kwargs (Any):
+                Additional keyword arguments to pass to `torch.load`.
+
+        Returns:
+            dict[str, torch.Tensor]:
+                A dictionary containing the loaded object.
+        """
+
         with self._ckpt.reader(path) as reader:
             return torch.load(reader, **kwargs)
 
     def save_config(self, path: Path, config_: dict[str, Any]) -> None:
+        """Save the configuration dictionary as a JSON file to GCS.
+
+        Args:
+            path (Path):
+                The directory path where the configuration file will be saved.
+            config_ (dict[str, Any]):
+                The configuration dictionary to be saved.
+        """
+
         filepath = Path.joinpath(path, "config.json")
         blob = self._ckpt.bucket.blob(str(filepath))
         blob.upload_from_string(
@@ -96,6 +118,17 @@ class CheckpointHelper:
     def save(
         self, state_dict: dict[str, torch.Tensor], path: Path, use_async: bool = False
     ) -> None:
+        """Save an object directly to GCS with `torch.save`.
+
+        Args:
+            state_dict (dict[str, torch.Tensor]):
+                The state dictionary to save.
+            path (Path):
+                The file path where the state dictionary will be saved.
+            use_async (bool, optional):
+                If True, save the state dictionary asynchronously. Defaults to False.
+        """
+
         def _save() -> None:
             with self._ckpt.writer(str(path)) as writer:
                 torch_save(state_dict, writer)
@@ -106,9 +139,21 @@ class CheckpointHelper:
             _save()
 
     def getsize(self, path: Path) -> int:
+        """Get the size of a blob in GCS.
+
+        Args:
+            path (Path):
+                The path to the file.
+
+        Returns:
+            int:
+                The size of the file in bytes.
+        """
+
         return self._ckpt.bucket.get_blob(str(path)).size
 
     def teardown(self) -> None:
+        """Shut down the executor."""
         self._executor.shutdown(wait=True)
 
 

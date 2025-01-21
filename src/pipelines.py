@@ -9,8 +9,7 @@ from google_cloud_pipeline_components.v1.bigquery import BigqueryQueryJobOp
 from google_cloud_pipeline_components.v1.dataproc import DataprocPySparkBatchOp
 from kfp import dsl
 
-from src.config import gcp
-from components import (
+from src.components import (
     create_dataset,
     custom_training_job,
     download_hf_repo,
@@ -19,6 +18,7 @@ from components import (
     set_fuzzy_dedup_args,
     set_tokenization_args,
 )
+from src.config import gcp
 
 
 @dsl.pipeline

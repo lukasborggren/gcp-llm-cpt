@@ -270,8 +270,6 @@ def train(
 ) -> dsl.Model:
     """Continued pre-training of an LLM using torchtune and torchrun.
 
-    Currently only supports single-node multi-worker training.
-
     Args:
         pretrained_model (kfp.dsl.Model):
             The pre-trained model to fine-tune.
@@ -289,9 +287,6 @@ def train(
 
     import json
     import os
-    import socket
-    import subprocess
-    import time
     from unittest.mock import patch
     from urllib.parse import urlparse
 
@@ -302,7 +297,7 @@ def train(
     from torch.distributed.run import get_args_parser, run
     from torchtune import utils
 
-    from src.utils import CustomEtcdStore
+    from src.utils import CustomEtcdStore, start_etcd_server
 
     log = utils.get_logger("DEBUG")
     model = dsl.Model(uri=dsl.get_uri())
@@ -327,45 +322,22 @@ def train(
     )
 
     # Overriding arguments from the YAML config
-    config["bucket_name"] = bucket_name
-    config["output_dir"] = urlparse(model.uri).path.lstrip("/")
-    config["tokenizer"]["path"] = os.path.join(model_dir, config["tokenizer"]["path"])
-    config["checkpointer"]["checkpoint_dir"] = model_dir
-    config["device"] = "cuda" if torch.cuda.is_available() else "cpu"
-    config["dataset"]["uri"] = train_data.uri
-
+    config.update(
+        {
+            "bucket_name": bucket_name,
+            "output_dir": urlparse(model.uri).path.lstrip("/"),
+            "tokenizer": {"path": os.path.join(model_dir, config["tokenizer"]["path"])},
+            "checkpointer": {"checkpoint_dir": model_dir},
+            "device": "cuda" if torch.cuda.is_available() else "cpu",
+            "dataset": {"uri": train_data.uri},
+        }
+    )
     os.makedirs(config["output_dir"], exist_ok=True)
     os.makedirs(config["metric_logger"]["log_dir"], exist_ok=True)
 
     # If multi-node training, use etcd backend for rendezvous
     if (num_nodes := int(os.environ.get("WORLD_SIZE", "1"))) > 1:
-        ip_filename = f"{dsl.get_uri()}/host_ip"
-
-        if os.environ["RANK"] == "0":
-            os.environ["HOST_IP"] = socket.gethostbyname(socket.gethostname())
-            # Write host IP to GCS for other nodes to read
-            bucket = bucket.blob(ip_filename).upload_from_string(os.environ["HOST_IP"])
-
-            cmd = f"/tmp/etcd-download/etcd --name s1 --data-dir /tmp/etcd-download/s1  \
-                --listen-client-urls http://0.0.0.0:2379 --advertise-client-urls http://{os.environ['HOST_IP']}:2379 \
-                --listen-peer-urls http://0.0.0.0:2380 --initial-advertise-peer-urls http://{os.environ['HOST_IP']}:2380 \
-                --initial-cluster s1=http://{os.environ['HOST_IP']}:2380 --initial-cluster-token tkn"
-
-            log.info("Starting etcd server on host node")
-            # pylint: disable=consider-using-with
-            subprocess.Popen(cmd.split(), env=dict(os.environ, ETCDCTL_API="2"))
-            time.sleep(10)  # Wait for ETCD server to start in background
-        else:
-            log.info("Waiting for host IP to be uploaded to GCS")
-            for _ in range(60):
-                blob = bucket.blob(ip_filename)
-                if blob.exists():
-                    break
-                time.sleep(1)
-
-            # Read host IP from GCS
-            os.environ["HOST_IP"] = blob.download_as_string().decode()
-
+        start_etcd_server(bucket)
         rdzv_args = [
             "--rdzv-backend",
             "etcd-v2",
